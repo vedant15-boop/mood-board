@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Mood Pattern</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #0f172a;
+        }
+        
+        /* WebGL Canvas for the background */
+        #webgl-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+        }
+
+        #webgl-canvas.visible {
+            opacity: 0.6;
+        }
+
+        /* The orb element styling */
+        .mood-orb {
+            cursor: pointer;
+            border-width: 1px;
+            border-color: rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease-in-out;
+            position: relative;
+            background-color: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .mood-orb:hover {
+            transform: translateY(-8px) scale(1.05);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .mood-label {
+            transition: color 0.3s ease-in-out;
+            color: #94a3b8;
+        }
+        
+        .mood-orb:hover .mood-label {
+            color: #ffffff;
+        }
+        
+        /* Container for the main content */
+        #content-container {
+            position: relative;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+    
+    <!-- Canvas for the WebGL background -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- This container holds the actual content -->
+    <div id="content-container" class="relative flex flex-col items-center justify-center min-h-screen p-4 text-white">
+        
+        <header class="text-center mb-16">
+            <h1 class="text-3xl md:text-5xl font-bold tracking-tight text-slate-200">How are you feeling?</h1>
+            <p class="text-slate-400 mt-2 text-lg">Select a mood to transform your space.</p>
+        </header>
+
+        <!-- Grid for mood selection orbs -->
+        <main class="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+            
+            <div class="flex flex-col items-center group">
+                <div id="mood-calm" class="mood-orb w-28 h-28 md:w-36 md:h-36 rounded-full flex items-center justify-center" style="--hover-shadow-color: hsl(217, 91%, 60%);">
+                    <span class="mood-label text-lg font-medium">Calm</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-center group">
+                <div id="mood-happy" class="mood-orb w-28 h-28 md:w-36 md:h-36 rounded-full flex items-center justify-center" style="--hover-shadow-color: hsl(43, 96%, 50%);">
+                    <span class="mood-label text-lg font-medium">Happy</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-center group">
+                <div id="mood-focus" class="mood-orb w-28 h-28 md:w-36 md:h-36 rounded-full flex items-center justify-center" style="--hover-shadow-color: hsl(262, 91%, 66%);">
+                    <span class="mood-label text-lg font-medium">Focus</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-center group">
+                <div id="mood-energy" class="mood-orb w-28 h-28 md:w-36 md:h-36 rounded-full flex items-center justify-center" style="--hover-shadow-color: hsl(0, 84%, 60%);">
+                    <span class="mood-label text-lg font-medium">Energy</span>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Import Three.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- Vertex Shader: Positions the vertices of our plane -->
+    <script id="vertexShader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+
+    <!-- Fragment Shader: Colors each pixel and creates the ripple -->
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        // Target colors
+        uniform vec3 u_c1;
+        uniform vec3 u_c2;
+        uniform vec3 u_c3;
+        uniform vec3 u_c4;
+        uniform vec3 u_c5;
+        
+        // Old colors for transition
+        uniform vec3 u_old_c1;
+        uniform vec3 u_old_c2;
+        uniform vec3 u_old_c3;
+        uniform vec3 u_old_c4;
+        uniform vec3 u_old_c5;
+
+        // Transition progress (0.0 to 1.0)
+        uniform float u_transition_progress;
+
+        // Ripple uniforms
+        uniform vec2 u_mouse;
+        uniform float u_time;
+        uniform float u_ripple_strength;
+
+        // Rotation matrix function
+        mat2 rotate(float angle) {
+            return mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+        }
+
+        void main() {
+            // --- RIPPLE & SWIRL EFFECT ---
+            vec2 direction = vUv - u_mouse;
+            float dist = length(direction);
+
+            // Create concentric rings that move outwards over time
+            float rings = fract(dist * 15.0 - u_time * 2.5);
+            rings = 0.5 - 0.5 * cos(rings * 6.28318);
+
+            // Create a falloff effect so the ripple fades as it moves away from the center
+            float falloff = 1.0 - smoothstep(0.0, 0.4, dist);
+            float ripple = rings * falloff * u_ripple_strength;
+
+            // Calculate a swirl angle. It's strongest at the center and depends on the ripple wave.
+            float swirlStrength = (1.0 - smoothstep(0.0, 0.25, dist)) * 2.5; // Controls max swirl amount
+            float swirlAngle = ripple * swirlStrength;
+
+            // Rotate the texture coordinates around the mouse click position to create the swirl
+            vec2 centeredUv = vUv - u_mouse;
+            centeredUv = rotate(swirlAngle) * centeredUv;
+            vec2 swirledUv = centeredUv + u_mouse;
+            
+            // Displace the swirled coordinates outwards to create the ripple
+            vec2 finalDirection = swirledUv - u_mouse;
+            vec2 displacedUv = swirledUv + normalize(finalDirection) * ripple * 0.03;
+
+            // --- COLOR TRANSITION ---
+            vec3 c1 = mix(u_old_c1, u_c1, u_transition_progress);
+            vec3 c2 = mix(u_old_c2, u_c2, u_transition_progress);
+            vec3 c3 = mix(u_old_c3, u_c3, u_transition_progress);
+            vec3 c4 = mix(u_old_c4, u_c4, u_transition_progress);
+            vec3 c5 = mix(u_old_c5, u_c5, u_transition_progress);
+
+            // --- STRIPE PATTERN ---
+            vec3 color;
+            if (displacedUv.x < 0.2) {
+                color = c1;
+            } else if (displacedUv.x < 0.4) {
+                color = c2;
+            } else if (displacedUv.x < 0.6) {
+                color = c3;
+            } else if (displacedUv.x < 0.8) {
+                color = c4;
+            } else {
+                color = c5;
+            }
+
+            gl_FragColor = vec4(color, 1.0);
+        }
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('webgl-canvas');
+            const moodOrbs = document.querySelectorAll('.mood-orb');
+            let currentMood = '';
+
+            // --- WebGL Setup ---
+            const scene = new THREE.Scene();
+            const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            
+            const moodColors = {
+                'mood-calm': [new THREE.Color('#a3d5ff'), new THREE.Color('#82c7ff'), new THREE.Color('#62baff'), new THREE.Color('#41adff'), new THREE.Color('#21a0ff')],
+                'mood-happy': [new THREE.Color('#ffeb99'), new THREE.Color('#ffe066'), new THREE.Color('#ffd533'), new THREE.Color('#ffcc00'), new THREE.Color('#e6b800')],
+                'mood-focus': [new THREE.Color('#d8b4fe'), new THREE.Color('#c084fc'), new THREE.Color('#a855f7'), new THREE.Color('#9333ea'), new THREE.Color('#7e22ce')],
+                'mood-energy': [new THREE.Color('#fca5a5'), new THREE.Color('#f87171'), new THREE.Color('#ef4444'), new THREE.Color('#dc2626'), new THREE.Color('#b91c1c')]
+            };
+            
+            const initialColor = new THREE.Color('#0f172a');
+            const uniforms = {
+                // Target colors
+                u_c1: { value: initialColor.clone() },
+                u_c2: { value: initialColor.clone() },
+                u_c3: { value: initialColor.clone() },
+                u_c4: { value: initialColor.clone() },
+                u_c5: { value: initialColor.clone() },
+                // Old colors for transition
+                u_old_c1: { value: initialColor.clone() },
+                u_old_c2: { value: initialColor.clone() },
+                u_old_c3: { value: initialColor.clone() },
+                u_old_c4: { value: initialColor.clone() },
+                u_old_c5: { value: initialColor.clone() },
+                // Transition progress
+                u_transition_progress: { value: 1.0 }, // Start at 1 (fully transitioned)
+                // Ripple uniforms
+                u_mouse: { value: new THREE.Vector2(0.5, 0.5) },
+                u_time: { value: 0.0 },
+                u_ripple_strength: { value: 0.0 }
+            };
+
+            const geometry = new THREE.PlaneGeometry(2, 2);
+            const material = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShader').textContent,
+            });
+
+            const plane = new THREE.Mesh(geometry, material);
+            scene.add(plane);
+
+            // --- Animation & Interaction ---
+            const clock = new THREE.Clock();
+            
+            function animate() {
+                const delta = clock.getDelta();
+                requestAnimationFrame(animate);
+                
+                // Animate ripple time if a ripple is active
+                if (uniforms.u_ripple_strength.value > 0) {
+                    uniforms.u_time.value += delta * 2.0;
+                    uniforms.u_ripple_strength.value *= 0.96;
+                }
+
+                // Animate color transition if in progress
+                if (uniforms.u_transition_progress.value < 1.0) {
+                    uniforms.u_transition_progress.value += delta / 1.5; // 1.5 second transition
+                    if (uniforms.u_transition_progress.value > 1.0) {
+                        uniforms.u_transition_progress.value = 1.0;
+                    }
+                }
+
+                renderer.render(scene, camera);
+            }
+
+            function onWindowResize() {
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            window.addEventListener('resize', onWindowResize, false);
+            onWindowResize();
+            animate();
+
+            const changeBackground = (moodId) => {
+                if (!moodId || moodId === currentMood) return;
+                currentMood = moodId;
+                const colors = moodColors[moodId];
+                
+                // 1. Copy current colors to old_colors uniforms
+                uniforms.u_old_c1.value.copy(uniforms.u_c1.value);
+                uniforms.u_old_c2.value.copy(uniforms.u_c2.value);
+                uniforms.u_old_c3.value.copy(uniforms.u_c3.value);
+                uniforms.u_old_c4.value.copy(uniforms.u_c4.value);
+                uniforms.u_old_c5.value.copy(uniforms.u_c5.value);
+
+                // 2. Set the new target colors
+                uniforms.u_c1.value.copy(colors[0]);
+                uniforms.u_c2.value.copy(colors[1]);
+                uniforms.u_c3.value.copy(colors[2]);
+                uniforms.u_c4.value.copy(colors[3]);
+                uniforms.u_c5.value.copy(colors[4]);
+
+                // 3. Reset the transition progress to start the animation
+                uniforms.u_transition_progress.value = 0.0;
+
+                // Make sure the canvas is visible if it's the first time
+                if (!canvas.classList.contains('visible')) {
+                    canvas.classList.add('visible');
+                }
+            };
+
+            moodOrbs.forEach(orb => {
+                const hoverColor = orb.style.getPropertyValue('--hover-shadow-color');
+                orb.addEventListener('mouseenter', () => { orb.style.boxShadow = `0 0 35px -5px ${hoverColor}`; });
+                orb.addEventListener('mouseleave', () => { orb.style.boxShadow = 'none'; });
+                orb.addEventListener('click', () => { changeBackground(orb.id); });
+            });
+
+            // Handle clicks for ripple effect
+            window.addEventListener('click', (e) => {
+                if (e.target.closest('.mood-orb') || !canvas.classList.contains('visible')) return;
+                
+                uniforms.u_mouse.value.x = e.clientX / window.innerWidth;
+                uniforms.u_mouse.value.y = 1.0 - (e.clientY / window.innerHeight);
+                uniforms.u_time.value = 0;
+                uniforms.u_ripple_strength.value = 1.0;
+            });
+        });
+    </script>
+</body>
+</html>
