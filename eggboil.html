@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boil-an-Egg Timer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Custom transition for smooth height and opacity changes */
+        .transition-all-smooth {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #egg-progress-fill {
+            transition: height 1s linear, y 1s linear;
+        }
+    </style>
+</head>
+<body class="bg-amber-50 text-gray-800 flex items-center justify-center min-h-screen">
+
+    <div id="app-container" class="w-full max-w-md mx-auto p-4">
+        
+        <!-- App Title -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-amber-900">Boil-an-Egg</h1>
+            <p class="text-amber-700 mt-2">Pick your perfect yolk!</p>
+        </header>
+
+        <!-- Selection Screen -->
+        <div id="selection-screen" class="transition-all-smooth">
+            <div class="bg-white/60 backdrop-blur-sm p-6 rounded-3xl shadow-lg">
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Soft Boiled -->
+                    <button onclick="startTimer(300, 'Soft Boiled')" class="option-button group">
+                        <div class="text-6xl mb-2">🥚</div>
+                        <h3 class="font-bold text-lg text-amber-900">Soft</h3>
+                        <p class="text-sm text-amber-800">5 mins</p>
+                    </button>
+                    <!-- Medium Boiled -->
+                    <button onclick="startTimer(420, 'Medium Boiled')" class="option-button group">
+                        <div class="text-6xl mb-2">🥚</div>
+                        <h3 class="font-bold text-lg text-amber-900">Medium</h3>
+                        <p class="text-sm text-amber-800">7 mins</p>
+                    </button>
+                    <!-- Hard Boiled -->
+                    <button onclick="startTimer(660, 'Hard Boiled')" class="option-button group">
+                        <div class="text-6xl mb-2">🥚</div>
+                        <h3 class="font-bold text-lg text-amber-900">Hard</h3>
+                        <p class="text-sm text-amber-800">11 mins</p>
+                    </button>
+                    <!-- Test Timer -->
+                    <button onclick="startTimer(10, 'Test Timer')" class="option-button group">
+                        <div class="text-6xl mb-2">⏱️</div>
+                        <h3 class="font-bold text-lg text-amber-900">Test</h3>
+                        <p class="text-sm text-amber-800">10 secs</p>
+                    </button>
+                </div>
+            </div>
+            <div class="text-center mt-4">
+                <p class="text-xs text-amber-600">Times are approximate. Results may vary based on egg size and starting temperature.</p>
+            </div>
+        </div>
+
+        <!-- Timer Screen -->
+        <div id="timer-screen" class="hidden transition-all-smooth">
+            <div class="bg-white/60 backdrop-blur-sm p-8 rounded-3xl shadow-lg text-center">
+                <p id="timer-label" class="text-2xl font-bold text-amber-900 mb-2">Medium Boiled</p>
+                
+                <!-- Egg Progress SVG -->
+                <div class="relative w-40 h-48 mx-auto mb-2">
+                    <svg viewBox="0 0 80 100" class="absolute inset-0 w-full h-full">
+                        <defs>
+                            <clipPath id="egg-clip">
+                                <rect id="egg-progress-fill" x="0" y="100" width="80" height="0"></rect>
+                            </clipPath>
+                        </defs>
+                        <!-- Egg Background -->
+                        <path d="M40 99C62.0914 99 80 76.8375 80 54.5C80 32.1625 62.0914 1 40 1C17.9086 1 0 32.1625 0 54.5C0 76.8375 17.9086 99 40 99Z" fill="#E5E7EB"></path>
+                        <!-- Egg Fill (clipped) -->
+                        <path d="M40 99C62.0914 99 80 76.8375 80 54.5C80 32.1625 62.0914 1 40 1C17.9086 1 0 32.1625 0 54.5C0 76.8375 17.9086 99 40 99Z" fill="#FBBF24" clip-path="url(#egg-clip)"></path>
+                         <!-- Egg Outline -->
+                        <path d="M40 99C62.0914 99 80 76.8375 80 54.5C80 32.1625 62.0914 1 40 1C17.9086 1 0 32.1625 0 54.5C0 76.8375 17.9086 99 40 99Z" fill="none" stroke="#D1D5DB" stroke-width="2"></path>
+                    </svg>
+                    <div id="timer-display" class="absolute inset-0 flex items-center justify-center text-4xl font-black text-amber-900 tabular-nums">00:00</div>
+                </div>
+
+                <button id="reset-button" onclick="resetTimer()" class="mt-4 bg-amber-500 text-white font-bold py-3 px-8 rounded-full shadow-md hover:bg-amber-600 transition-all duration-300 transform hover:scale-105">
+                    Cancel
+                </button>
+            </div>
+             <div id="done-message" class="hidden text-center mt-6">
+                <p class="text-3xl font-bold text-green-600">Your egg is ready!</p>
+            </div>
+        </div>
+
+    </div>
+
+    <style>
+        .option-button {
+            @apply bg-amber-100 p-4 rounded-2xl text-center cursor-pointer transition-all duration-300 transform hover:scale-105 hover:bg-amber-200 shadow-sm;
+        }
+        .option-button .text-6xl {
+            @apply transition-transform duration-300 group-hover:rotate-12;
+        }
+    </style>
+
+    <script>
+        // --- DOM Elements ---
+        const selectionScreen = document.getElementById('selection-screen');
+        const timerScreen = document.getElementById('timer-screen');
+        const timerDisplay = document.getElementById('timer-display');
+        const timerLabel = document.getElementById('timer-label');
+        const doneMessage = document.getElementById('done-message');
+        const resetButton = document.getElementById('reset-button');
+        const eggProgressFill = document.getElementById('egg-progress-fill');
+
+        // --- State ---
+        let timerInterval = null;
+        let totalSeconds = 0;
+        let initialDuration = 0;
+
+        // --- Audio ---
+        const synth = new Tone.Synth({
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 }
+        }).toDestination();
+
+        /**
+         * Starts the timer with a given duration and label.
+         * @param {number} duration - The total time in seconds.
+         * @param {string} label - The name of the recipe.
+         */
+        function startTimer(duration, label) {
+            Tone.start();
+
+            initialDuration = duration;
+            totalSeconds = duration;
+            timerLabel.textContent = label;
+            
+            updateTimerDisplay();
+            updateProgressBar();
+            
+            selectionScreen.classList.add('hidden');
+            timerScreen.classList.remove('hidden');
+            doneMessage.classList.add('hidden');
+            resetButton.textContent = 'Cancel';
+
+            timerInterval = setInterval(() => {
+                totalSeconds--;
+                updateTimerDisplay();
+                updateProgressBar();
+
+                if (totalSeconds < 0) {
+                    finishTimer();
+                }
+            }, 1000);
+        }
+
+        /**
+         * Updates the timer display with the current time.
+         */
+        function updateTimerDisplay() {
+            const displaySeconds = Math.max(0, totalSeconds);
+            const minutes = Math.floor(displaySeconds / 60);
+            const seconds = displaySeconds % 60;
+            timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        /**
+         * Updates the visual progress bar.
+         */
+        function updateProgressBar() {
+            const progress = (initialDuration - Math.max(0, totalSeconds)) / initialDuration;
+            const svgHeight = 100; // Corresponds to the viewBox height
+            const fillHeight = svgHeight * progress;
+            const yPos = svgHeight - fillHeight;
+
+            eggProgressFill.setAttribute('y', yPos);
+            eggProgressFill.setAttribute('height', fillHeight);
+        }
+
+        /**
+         * Handles the completion of the timer.
+         */
+        function finishTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            
+            const now = Tone.now();
+            synth.triggerAttackRelease('C5', '8n', now);
+            synth.triggerAttackRelease('G5', '8n', now + 0.2);
+            synth.triggerAttackRelease('C5', '8n', now + 0.4);
+
+            doneMessage.classList.remove('hidden');
+            resetButton.textContent = 'New Egg';
+            timerScreen.classList.add('animate-pulse');
+        }
+
+        /**
+         * Resets the timer and returns to the selection screen.
+         */
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+
+            selectionScreen.classList.remove('hidden');
+            timerScreen.classList.add('hidden');
+            timerScreen.classList.remove('animate-pulse');
+            
+            // Reset progress bar
+            eggProgressFill.setAttribute('y', '100');
+            eggProgressFill.setAttribute('height', '0');
+        }
+
+    </script>
+</body>
+</html>
